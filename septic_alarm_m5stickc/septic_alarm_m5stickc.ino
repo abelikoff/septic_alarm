@@ -37,21 +37,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-#if 0
-  WiFi.mode(WIFI_STA);  //Optional
-  WiFi.begin(ssid, password);
-  Serial.println("\nConnecting");
-
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(100);
-  }
-
-  Serial.println("\nConnected to the WiFi network");
-  Serial.print("Local ESP32 IP: ");
-  Serial.println(WiFi.localIP());
-#endif
-
+  connectToWiFi();
   i2sInit();
   xTaskCreate(checkSoundVolumeTask, "checkSoundVolumeTask", 2048, NULL, 1, NULL);
 }
@@ -71,13 +57,6 @@ void loop() {
   }
 
   vTaskDelay(5 / portTICK_RATE_MS);
-}
-
-
-void displayMAVG(uint16_t mavg) {
-  char s[32];
-  snprintf(s, sizeof(s), "MAVG: %d", mavg);
-  M5.Lcd.drawString(s, 80, 60, 2);
 }
 
 
@@ -139,7 +118,7 @@ void displayStatus(bool on) {
     M5.Lcd.setTextColor(YELLOW);
     M5.Lcd.drawString(wlan_prefix, left_margin, 45, font);
     M5.Lcd.setTextColor(WHITE);
-    snprintf(str, sizeof(str), "Conn");
+    snprintf(str, sizeof(str), "%s", getWiFiStatus());
     M5.Lcd.drawString(str, left_margin + prefix_len, 45, font);
 
     prefix_len = M5.Lcd.textWidth(last_alarm_prefix, font);
@@ -246,4 +225,48 @@ void i2sInit() {
   i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
   i2s_set_pin(I2S_NUM_0, &pin_config);
   i2s_set_clk(I2S_NUM_0, 44100, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
+}
+
+
+void connectToWiFi() {
+  WiFi.mode(WIFI_STA);  //Optional
+  WiFi.begin(ssid, password);
+  Serial.println("\nConnecting");
+  bool connected = false;
+
+  for (int i = 0; i < 100; i++) {
+    if (WiFi.status() == WL_CONNECTED) {
+      connected = true;
+      break;
+    }
+
+    Serial.print(".");
+    delay(100);
+  }
+
+  if (!connected) {
+    Serial.println("Cannot connect to Wi-Fi");
+    return;
+  }
+
+  Serial.println("\nConnected to the WiFi network");
+  Serial.print("Local ESP32 IP: ");
+  Serial.println(WiFi.localIP());
+}
+
+
+const char *getWiFiStatus() {
+  wl_status_t status = WiFi.status();
+
+  switch (status) {
+    case WL_IDLE_STATUS: return "idle";
+    case WL_NO_SSID_AVAIL: return "no SSID";
+    case WL_CONNECTED: return "connected";
+    case WL_CONNECT_FAILED: return "connection failed";
+    case WL_CONNECTION_LOST: return "connection lost";
+    case WL_DISCONNECTED: return "disconnected";
+
+    default:
+      return "<other>";
+  }
 }
