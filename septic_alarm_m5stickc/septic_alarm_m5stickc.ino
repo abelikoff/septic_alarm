@@ -4,6 +4,8 @@
 #include <M5StickCPlus.h>
 #include <utility/ST7735_Defines.h>
 #include <WiFi.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 #include <driver/i2s.h>
 
 #include "arduino_secrets.h"
@@ -38,6 +40,7 @@ void setup() {
   delay(1000);
 
   connectToWiFi();
+  getNTPTime();
   i2sInit();
   xTaskCreate(checkSoundVolumeTask, "checkSoundVolumeTask", 2048, NULL, 1, NULL);
 }
@@ -252,6 +255,50 @@ void connectToWiFi() {
   Serial.println("\nConnected to the WiFi network");
   Serial.print("Local ESP32 IP: ");
   Serial.println(WiFi.localIP());
+}
+
+
+void getNTPTime() {
+  WiFiUDP ntpUDP;
+  NTPClient timeClient(ntpUDP);
+  String formattedDate;
+  String dayStamp;
+  String timeStamp;
+
+  timeClient.begin();
+  // Set offset time in seconds to adjust for your timezone, for example:
+  // GMT +1 = 3600
+  // GMT +8 = 28800
+  // GMT -1 = -3600
+  // GMT 0 = 0
+  timeClient.setTimeOffset(-5 * 3600);
+
+  while (!timeClient.update()) {
+    timeClient.forceUpdate();
+  }
+
+  Serial.println("NTP time obtained");
+  // The formattedDate comes with the following format:
+  // 2018-05-28T16:00:13Z
+  // We need to extract date and time
+  //formattedDate = timeClient.getFormattedTime();
+
+  time_t rawtime = timeClient.getEpochTime();
+  struct tm* ti;
+  ti = localtime(&rawtime);
+
+  RTC_DateTypeDef DateStruct;
+  DateStruct.WeekDay = ti->tm_wday;
+  DateStruct.Month = ti->tm_mon;
+  DateStruct.Date = ti->tm_mday;
+  DateStruct.Year = ti->tm_year + 1900;
+  M5.Rtc.SetData(&DateStruct);
+
+  RTC_TimeTypeDef TimeStruct;
+  TimeStruct.Hours   = timeClient.getHours();
+  TimeStruct.Minutes = timeClient.getMinutes();
+  TimeStruct.Seconds = timeClient.getSeconds();
+  M5.Rtc.SetTime(&TimeStruct);
 }
 
 
