@@ -2,6 +2,7 @@
 
 //#include <M5Stack.h>
 #include <M5StickCPlus.h>
+#include <utility/ST7735_Defines.h>
 #include <WiFi.h>
 #include <driver/i2s.h>
 
@@ -25,24 +26,14 @@ int alarm_sound_streak = 0;
 uint8_t BUFFER[READ_LEN] = { 0 };
 uint16_t oldy[NUM_SAMPLES];
 int16_t *adcBuffer = NULL;
-
+bool display_on = false;
+double last_sound_level = 0;
 
 double calculateSoundLevel();
 
 
 void setup() {
   M5.begin();
-
-  M5.Lcd.fillScreen(BLACK);
-  M5.Lcd.setTextDatum(CC_DATUM);
-  M5.Lcd.drawString("M5Stack has been connected", 160, 120, 2);
-
-  /*M5.Lcd.setRotation(3);
-    M5.Lcd.fillScreen(WHITE);
-    M5.Lcd.setTextColor(BLACK, WHITE);
-    M5.Lcd.println("zz mic test");*/
-
-
   Serial.begin(115200);
   delay(1000);
 
@@ -67,33 +58,20 @@ void setup() {
 
 
 void loop() {
-  M5.update();  // Read the press state of the key.  读取按键 A, B, C 的状态
+  M5.update();  // Read the press state of the keys
 
-  if (M5.BtnA.isPressed()) {
-      Serial.print(".");
-      displayStatus(true);
+  if (M5.BtnA.wasReleased()) {
+    if (!display_on) {
+      display_on = true;
+      displayStatus(display_on);
+    } else {
+      display_on = false;
+      displayStatus(display_on);
+    }
   }
-  if (M5.BtnA.wasReleasefor(3000)) {
-      Serial.println("released");
-      displayStatus(false);
-  }
 
-  vTaskDelay(500 / portTICK_RATE_MS);
-
-/*  if (M5.BtnA.wasReleased()) {  // If the button A is pressed.  如果按键 A 被按下
-    M5.Lcd.print('A');
-  } else if (M5.BtnB.wasReleased()) {
-    M5.Lcd.print('B');
-  } else if (M5.BtnB.wasReleasefor(700)) {
-    M5.Lcd.fillScreen(BLACK);
-    M5.Lcd.setCursor(0, 0);
-  }*/
-
-  //printf("loop cycling\n");
-  //vTaskDelay(1000 / portTICK_RATE_MS);  // otherwise the main task wastes half
-  // of the cpu cycles
+  vTaskDelay(5 / portTICK_RATE_MS);
 }
-
 
 
 void displayMAVG(uint16_t mavg) {
@@ -136,6 +114,9 @@ void displayStatus(bool on) {
     uint16_t prefix_len;
     char str[64];
 
+    //M5.Lcd.setBrightness(brightness);
+    M5.Lcd.writecommand(ST7735_DISPON);
+    M5.Axp.ScreenBreath(255);
     //M5.Lcd.wakeup();
     //M5.Lcd.setBrightness(200);
     //M5.Lcd.clear(BLACK);
@@ -172,13 +153,15 @@ void displayStatus(bool on) {
     M5.Lcd.setTextColor(YELLOW);
     M5.Lcd.drawString(sound_prefix, left_margin, 95, font);
     M5.Lcd.setTextColor(WHITE);
-    snprintf(str, sizeof(str), "55 dB");
+    snprintf(str, sizeof(str), "%.1f dB", last_sound_level);
     M5.Lcd.drawString(str, left_margin + prefix_len, 95, font);
 
     snprintf(str, sizeof(str), "v%s", version);
     prefix_len = M5.Lcd.textWidth(str, font);
     M5.Lcd.drawString(str, M5.Lcd.width() - prefix_len, 120, 1);
   } else {
+    M5.Lcd.writecommand(ST7735_DISPOFF);
+    M5.Axp.ScreenBreath(0);
     //M5.Lcd.sleep();
     //M5.Lcd.setBrightness(0);
   }
@@ -193,12 +176,12 @@ void checkSoundVolumeTask(void *arg) {
              (100 / portTICK_RATE_MS));
     adcBuffer = (int16_t *)BUFFER;
 
-    double level = calculateSoundLevel();
-    Serial.printf("Sound level: %.1f dB  (streak: %d)\n", level, alarm_sound_streak);
+    last_sound_level = calculateSoundLevel();
+    Serial.printf("Sound level: %.1f dB  (streak: %d)\n", last_sound_level, alarm_sound_streak);
 
-    if (level >= ALARM_SOUND_LEVEL_THRESHOLD) {
+    if (last_sound_level >= ALARM_SOUND_LEVEL_THRESHOLD) {
       alarm_sound_streak++;
-      
+
       if (alarm_sound_streak == ALARM_SOUND_STREAK_THRESHOLD) {
         registerAlarmEvent(true);
       }
@@ -264,4 +247,3 @@ void i2sInit() {
   i2s_set_pin(I2S_NUM_0, &pin_config);
   i2s_set_clk(I2S_NUM_0, 44100, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
 }
-
