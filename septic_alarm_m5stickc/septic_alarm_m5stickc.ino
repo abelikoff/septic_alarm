@@ -1,6 +1,5 @@
 #include <cmath>
 
-//#include <M5Stack.h>
 #include <M5StickCPlus.h>
 #include <utility/ST7735_Defines.h>
 #include <WiFi.h>
@@ -20,9 +19,21 @@ const char version[] = "0.0.1";
 #define GAIN_FACTOR 3
 #define NUM_SAMPLES 160
 
+#define DEBUG
+
+#ifdef DEBUG
+
+const double ALARM_SOUND_LEVEL_THRESHOLD = 4.0;
+const int ALARM_SOUND_STREAK_THRESHOLD = 1;
+const int SOUND_CHECK_DELAY_SECONDS = 5;
+
+#else
+
 const double ALARM_SOUND_LEVEL_THRESHOLD = 9.0;
 const int ALARM_SOUND_STREAK_THRESHOLD = 5;
 const int SOUND_CHECK_DELAY_SECONDS = 5;
+
+#endif
 
 int alarm_sound_streak = 0;
 uint8_t BUFFER[READ_LEN] = { 0 };
@@ -30,6 +41,9 @@ uint16_t oldy[NUM_SAMPLES];
 int16_t *adcBuffer = NULL;
 bool display_on = false;
 double last_sound_level = 0;
+RTC_DateTypeDef last_alarm_date;
+RTC_TimeTypeDef last_alarm_time;
+
 
 double calculateSoundLevel();
 
@@ -78,6 +92,8 @@ void showSignal() {
 void registerAlarmEvent(bool started) {
   if (started) {
     Serial.println("+++++++ ALARM HAS STARTED");
+    M5.Rtc.GetData(&last_alarm_date);
+    M5.Rtc.GetTime(&last_alarm_time);
   } else {
     Serial.println("------- ALARM HAS STOPPED");
   }
@@ -113,23 +129,38 @@ void displayStatus(bool on) {
     prefix_len = M5.Lcd.textWidth(battery_prefix, font);
     M5.Lcd.setTextColor(YELLOW);
     M5.Lcd.drawString(battery_prefix, left_margin, 20, font);
-    M5.Lcd.setTextColor(WHITE);
-    snprintf(str, sizeof(str), "80%%");
+
+    double level = getBatteryLevel();
+
+    if (level < 30) {
+      M5.Lcd.setTextColor(RED);
+    } else if (level < 60) {
+      M5.Lcd.setTextColor(YELLOW);
+    } else {
+      M5.Lcd.setTextColor(GREEN);
+    }
+
+    snprintf(str, sizeof(str), "%.1f%%", level);
     M5.Lcd.drawString(str, left_margin + prefix_len, 20, font);
 
     prefix_len = M5.Lcd.textWidth(wlan_prefix, font);
     M5.Lcd.setTextColor(YELLOW);
     M5.Lcd.drawString(wlan_prefix, left_margin, 45, font);
-    M5.Lcd.setTextColor(WHITE);
-    snprintf(str, sizeof(str), "%s", getWiFiStatus());
+    bool connected;
+    snprintf(str, sizeof(str), "%s", getWiFiStatus(connected));
+    M5.Lcd.setTextColor(connected ? WHITE : RED);
     M5.Lcd.drawString(str, left_margin + prefix_len, 45, font);
 
     prefix_len = M5.Lcd.textWidth(last_alarm_prefix, font);
     M5.Lcd.setTextColor(YELLOW);
     M5.Lcd.drawString(last_alarm_prefix, left_margin, 70, font);
-    M5.Lcd.setTextColor(WHITE);
-    snprintf(str, sizeof(str), "07/28 13:33");
-    M5.Lcd.drawString(str, left_margin + prefix_len, 70, font);
+
+    if (last_alarm_date.Year > 0) {
+      M5.Lcd.setTextColor(WHITE);
+      snprintf(str, sizeof(str), "%02d/%02d %02d:%02d",
+               last_alarm_date.Month + 1, last_alarm_date.Date, last_alarm_time.Hours, last_alarm_time.Minutes);
+      M5.Lcd.drawString(str, left_margin + prefix_len, 70, font);
+    }
 
     prefix_len = M5.Lcd.textWidth(sound_prefix, font);
     M5.Lcd.setTextColor(YELLOW);
@@ -278,13 +309,14 @@ void getNTPTime() {
   }
 
   Serial.println("NTP time obtained");
+  Serial.println(timeClient.getFormattedTime());
   // The formattedDate comes with the following format:
   // 2018-05-28T16:00:13Z
   // We need to extract date and time
   //formattedDate = timeClient.getFormattedTime();
 
   time_t rawtime = timeClient.getEpochTime();
-  struct tm* ti;
+  struct tm *ti;
   ti = localtime(&rawtime);
 
   RTC_DateTypeDef DateStruct;
@@ -295,20 +327,21 @@ void getNTPTime() {
   M5.Rtc.SetData(&DateStruct);
 
   RTC_TimeTypeDef TimeStruct;
-  TimeStruct.Hours   = timeClient.getHours();
+  TimeStruct.Hours = timeClient.getHours();
   TimeStruct.Minutes = timeClient.getMinutes();
   TimeStruct.Seconds = timeClient.getSeconds();
   M5.Rtc.SetTime(&TimeStruct);
 }
 
 
-const char *getWiFiStatus() {
+const char *getWiFiStatus(bool &connected) {
+  connected = false;
   wl_status_t status = WiFi.status();
 
   switch (status) {
     case WL_IDLE_STATUS: return "idle";
     case WL_NO_SSID_AVAIL: return "no SSID";
-    case WL_CONNECTED: return "connected";
+    case WL_CONNECTED: connected = true; return "connected";
     case WL_CONNECT_FAILED: return "connection failed";
     case WL_CONNECTION_LOST: return "connection lost";
     case WL_DISCONNECTED: return "disconnected";
@@ -316,4 +349,11 @@ const char *getWiFiStatus() {
     default:
       return "<other>";
   }
+}
+
+double getBatteryLevel(void)
+{
+  uint16_t vbatData = M5.Axp.GetVbatData();
+  double vbat = vbatData * 1.1 / 1000;
+  return 100.0 * ((vbat - 3.0) / (4.07 - 3.0));
 }
