@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include "ThingSpeak.h"
 #include <driver/i2s.h>
 
 #include "arduino_secrets.h"
@@ -43,6 +44,11 @@ bool display_on = false;
 double last_sound_level = 0;
 RTC_DateTypeDef last_alarm_date;
 RTC_TimeTypeDef last_alarm_time;
+WiFiClient wifi_client;
+
+enum Status { STARTED,
+              ALARM_OFF,
+              ALARM_ON };
 
 
 double calculateSoundLevel();
@@ -54,7 +60,9 @@ void setup() {
   delay(1000);
 
   connectToWiFi();
+  connectToCloud();
   getNTPTime();
+  postStatus(STARTED);
   i2sInit();
   xTaskCreate(checkSoundVolumeTask, "checkSoundVolumeTask", 2048, NULL, 1, NULL);
 }
@@ -94,8 +102,10 @@ void registerAlarmEvent(bool started) {
     Serial.println("+++++++ ALARM HAS STARTED");
     M5.Rtc.GetData(&last_alarm_date);
     M5.Rtc.GetTime(&last_alarm_time);
+    postStatus(ALARM_ON);
   } else {
     Serial.println("------- ALARM HAS STOPPED");
+    postStatus(ALARM_OFF);
   }
 }
 
@@ -289,6 +299,25 @@ void connectToWiFi() {
 }
 
 
+void connectToCloud() {
+  ThingSpeak.begin(wifi_client);
+}
+
+
+void postStatus(Status st) {
+  int x;
+
+  if (st == STARTED) {
+    x = ThingSpeak.writeField(THINGSPEAK_CHANNEL_ID, 2, 1, THINGSPEAK_API_KEY);
+  } else {
+    x = ThingSpeak.writeField(THINGSPEAK_CHANNEL_ID, 1, st == ALARM_ON ? 1 : 0, THINGSPEAK_API_KEY);
+  }
+  if (x != 200) {
+    Serial.println("Failed to update channel. HTTP error code: " + String(x));
+  }
+}
+
+
 void getNTPTime() {
   WiFiUDP ntpUDP;
   NTPClient timeClient(ntpUDP);
@@ -351,8 +380,7 @@ const char *getWiFiStatus(bool &connected) {
   }
 }
 
-double getBatteryLevel(void)
-{
+double getBatteryLevel(void) {
   uint16_t vbatData = M5.Axp.GetVbatData();
   double vbat = vbatData * 1.1 / 1000;
   return 100.0 * ((vbat - 3.0) / (4.07 - 3.0));
