@@ -9,6 +9,7 @@
 #include <driver/i2s.h>
 
 #include "arduino_secrets.h"
+#include "battery.h"
 
 const char *ssid = SECRET_WIFI_SSID;
 const char *password = SECRET_WIFI_PASSWORD;
@@ -20,7 +21,7 @@ const char version[] = "0.0.1";
 #define GAIN_FACTOR 3
 #define NUM_SAMPLES 160
 
-#define DEBUG
+//#define DEBUG
 
 #ifdef DEBUG
 
@@ -31,8 +32,8 @@ const int SOUND_CHECK_DELAY_SECONDS = 5;
 #else
 
 const double ALARM_SOUND_LEVEL_THRESHOLD = 9.0;
-const int ALARM_SOUND_STREAK_THRESHOLD = 5;
-const int SOUND_CHECK_DELAY_SECONDS = 5;
+const int ALARM_SOUND_STREAK_THRESHOLD = 4;
+const int SOUND_CHECK_DELAY_SECONDS = 30;
 
 #endif
 
@@ -59,6 +60,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
+  initProgress();
   connectToWiFi();
   connectToCloud();
   getNTPTime();
@@ -110,6 +112,29 @@ void registerAlarmEvent(bool started) {
 }
 
 
+void initProgress() {
+  M5.Lcd.fillScreen(BLACK);
+  M5.Lcd.setRotation(-1);
+  M5.Lcd.setTextFont(2);
+  M5.Lcd.setTextSize(1);
+  //M5.Lcd.setFreeFont(&FreeMonoBold12pt7b);
+  M5.Lcd.setTextDatum(TL_DATUM);
+}
+
+
+void showProgress(int level, const char *message) {
+  if (level == 0) {
+    M5.Lcd.setTextColor(WHITE);
+  } else if (level == 1) {
+    M5.Lcd.setTextColor(YELLOW);
+  } else {
+    M5.Lcd.setTextColor(RED);
+  }
+
+  M5.Lcd.printf("%s", message);
+}
+
+
 void displayStatus(bool on) {
   if (on) {
     const char wlan_prefix[] = "WLAN: ";
@@ -140,7 +165,7 @@ void displayStatus(bool on) {
     M5.Lcd.setTextColor(YELLOW);
     M5.Lcd.drawString(battery_prefix, left_margin, 20, font);
 
-    double level = getBatteryLevel();
+    auto level = getBatteryLevel();
 
     if (level < 30) {
       M5.Lcd.setTextColor(RED);
@@ -150,7 +175,7 @@ void displayStatus(bool on) {
       M5.Lcd.setTextColor(GREEN);
     }
 
-    snprintf(str, sizeof(str), "%.1f%%", level);
+    snprintf(str, sizeof(str), "%d%%", level);
     M5.Lcd.drawString(str, left_margin + prefix_len, 20, font);
 
     prefix_len = M5.Lcd.textWidth(wlan_prefix, font);
@@ -158,8 +183,16 @@ void displayStatus(bool on) {
     M5.Lcd.drawString(wlan_prefix, left_margin, 45, font);
     bool connected;
     snprintf(str, sizeof(str), "%s", getWiFiStatus(connected));
-    M5.Lcd.setTextColor(connected ? WHITE : RED);
-    M5.Lcd.drawString(str, left_margin + prefix_len, 45, font);
+
+    if (connected) {
+      M5.Lcd.setTextColor(GREEN);
+      snprintf(str, sizeof(str), "connected (%s)", ssid);
+      M5.Lcd.drawString(str, left_margin + prefix_len, 45, font);
+
+    } else {
+      M5.Lcd.setTextColor(RED);
+      M5.Lcd.drawString(str, left_margin + prefix_len, 45, font);
+    }
 
     prefix_len = M5.Lcd.textWidth(last_alarm_prefix, font);
     M5.Lcd.setTextColor(YELLOW);
@@ -182,6 +215,8 @@ void displayStatus(bool on) {
     snprintf(str, sizeof(str), "v%s", version);
     prefix_len = M5.Lcd.textWidth(str, font);
     M5.Lcd.drawString(str, M5.Lcd.width() - prefix_len, 120, 1);
+
+    showBatteryLevel();
   } else {
     M5.Lcd.writecommand(ST7735_DISPOFF);
     M5.Axp.ScreenBreath(0);
@@ -273,6 +308,10 @@ void i2sInit() {
 
 
 void connectToWiFi() {
+  char s[128];
+  snprintf(s, sizeof(s), "* WiFi (%s)... ", ssid);
+  showProgress(0, s);
+
   WiFi.mode(WIFI_STA);  //Optional
   WiFi.begin(ssid, password);
   Serial.println("\nConnecting");
@@ -285,22 +324,24 @@ void connectToWiFi() {
     }
 
     Serial.print(".");
-    delay(100);
+    delay(200);
   }
 
   if (!connected) {
+    showProgress(2, "failed\n");
     Serial.println("Cannot connect to Wi-Fi");
     return;
   }
 
-  Serial.println("\nConnected to the WiFi network");
-  Serial.print("Local ESP32 IP: ");
-  Serial.println(WiFi.localIP());
+  snprintf(s, sizeof(s), "OK (%s)\n", WiFi.localIP().toString());
+  showProgress(0, s);
 }
 
 
 void connectToCloud() {
+  showProgress(0, "* ThingSpeak... ");
   ThingSpeak.begin(wifi_client);
+  showProgress(0, "OK\n");
 }
 
 
@@ -319,6 +360,8 @@ void postStatus(Status st) {
 
 
 void getNTPTime() {
+  showProgress(0, "* Time: ");
+
   WiFiUDP ntpUDP;
   NTPClient timeClient(ntpUDP);
   String formattedDate;
@@ -326,17 +369,20 @@ void getNTPTime() {
   String timeStamp;
 
   timeClient.begin();
+  showProgress(0, "start, ");
   // Set offset time in seconds to adjust for your timezone, for example:
   // GMT +1 = 3600
   // GMT +8 = 28800
   // GMT -1 = -3600
   // GMT 0 = 0
   timeClient.setTimeOffset(-5 * 3600);
+  showProgress(0, "upd, ");
 
   while (!timeClient.update()) {
     timeClient.forceUpdate();
   }
 
+  showProgress(0, "rcvd, ");
   Serial.println("NTP time obtained");
   Serial.println(timeClient.getFormattedTime());
   // The formattedDate comes with the following format:
@@ -360,6 +406,7 @@ void getNTPTime() {
   TimeStruct.Minutes = timeClient.getMinutes();
   TimeStruct.Seconds = timeClient.getSeconds();
   M5.Rtc.SetTime(&TimeStruct);
+  showProgress(0, "set\n");
 }
 
 
@@ -380,8 +427,30 @@ const char *getWiFiStatus(bool &connected) {
   }
 }
 
-double getBatteryLevel(void) {
+int getBatteryLevel(void) {
   uint16_t vbatData = M5.Axp.GetVbatData();
-  double vbat = vbatData * 1.1 / 1000;
-  return 100.0 * ((vbat - 3.0) / (4.07 - 3.0));
+  return round(((double) vbatData) / 3807.0 * 100);
+  return (double)vbatData;
+  //double vbat = vbatData * 1.1 / 1000;
+  //return 100.0 * ((vbat - 3.0) / (4.07 - 3.0));
+}
+
+// See https://m5stack.hackster.io/niyazthalappil/covid-19-real-time-data-monitor-7b43e5
+
+void showBatteryLevel() {
+  auto vbat = M5.Axp.GetVbatData() * 1.1 / 1000;
+  auto discharge = M5.Axp.GetIdischargeData() / 2;
+
+  if (vbat >= 4) {
+    M5.Lcd.pushImage(145, 1, 14, 8, bat_3);
+  } else if (vbat >= 3.7) {
+    M5.Lcd.pushImage(145, 1, 14, 8, bat_2);
+  } else if (vbat < 3.7) {
+    M5.Lcd.pushImage(145, 1, 14, 8, bat_1);
+  } else {
+  }
+  // M5.Lcd.setTextColor(TFT_YELLOW);
+  // M5.Lcd.setCursor(140, 12);
+  // M5.Lcd.setTextSize(1);
+  // M5.Lcd.println(discharge);
 }
