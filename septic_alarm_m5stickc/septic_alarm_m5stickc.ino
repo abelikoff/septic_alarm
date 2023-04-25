@@ -3,7 +3,7 @@
 #include <M5StickCPlus.h>
 #include <utility/ST7735_Defines.h>
 #include <WiFi.h>
-#include <NTPClient.h>
+#include <time.h>
 #include <WiFiUdp.h>
 #include "ThingSpeak.h"
 #include <driver/i2s.h>
@@ -13,7 +13,7 @@
 
 const char *ssid = SECRET_WIFI_SSID;
 const char *password = SECRET_WIFI_PASSWORD;
-const char version[] = "0.0.1";
+const char version[] = "0.0.2";
 
 #define PIN_CLK 0
 #define PIN_DATA 34
@@ -21,7 +21,7 @@ const char version[] = "0.0.1";
 #define GAIN_FACTOR 3
 #define NUM_SAMPLES 160
 
-//#define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
 
@@ -43,8 +43,8 @@ uint16_t oldy[NUM_SAMPLES];
 int16_t *adcBuffer = NULL;
 bool display_on = false;
 double last_sound_level = 0;
-RTC_DateTypeDef last_alarm_date;
-RTC_TimeTypeDef last_alarm_time;
+bool has_last_alarm_timestamp = false;
+struct tm last_alarm_tm;
 WiFiClient wifi_client;
 
 enum Status { STARTED,
@@ -63,7 +63,7 @@ void setup() {
   initProgress();
   connectToWiFi();
   connectToCloud();
-  getNTPTime();
+  configTime();
   postStatus(STARTED);
   i2sInit();
   xTaskCreate(checkSoundVolumeTask, "checkSoundVolumeTask", 2048, NULL, 1, NULL);
@@ -89,6 +89,7 @@ void loop() {
 
 void showSignal() {
   int y;
+
   for (int n = 0; n < NUM_SAMPLES; n++) {
     y = adcBuffer[n] * GAIN_FACTOR;
     y = map(y, INT16_MIN, INT16_MAX, 10, 70);
@@ -102,8 +103,14 @@ void showSignal() {
 void registerAlarmEvent(bool started) {
   if (started) {
     Serial.println("+++++++ ALARM HAS STARTED");
-    M5.Rtc.GetData(&last_alarm_date);
-    M5.Rtc.GetTime(&last_alarm_time);
+
+    if (!getLocalTime(&last_alarm_tm)) {
+      Serial.println("Failed to obtain local time");
+      has_last_alarm_timestamp = false;
+    } else {
+      has_last_alarm_timestamp = true;
+    }
+
     postStatus(ALARM_ON);
   } else {
     Serial.println("------- ALARM HAS STOPPED");
@@ -198,10 +205,9 @@ void displayStatus(bool on) {
     M5.Lcd.setTextColor(YELLOW);
     M5.Lcd.drawString(last_alarm_prefix, left_margin, 70, font);
 
-    if (last_alarm_date.Year > 0) {
+    if (has_last_alarm_timestamp) {
       M5.Lcd.setTextColor(WHITE);
-      snprintf(str, sizeof(str), "%02d/%02d %02d:%02d",
-               last_alarm_date.Month + 1, last_alarm_date.Date, last_alarm_time.Hours, last_alarm_time.Minutes);
+      strftime(str, sizeof(str), "%B %d %Y %H:%M:%S", &last_alarm_tm);
       M5.Lcd.drawString(str, left_margin + prefix_len, 70, font);
     }
 
@@ -333,6 +339,7 @@ void connectToWiFi() {
     return;
   }
 
+  Serial.println("");
   snprintf(s, sizeof(s), "OK (%s)\n", WiFi.localIP().toString());
   showProgress(0, s);
 }
@@ -359,53 +366,17 @@ void postStatus(Status st) {
 }
 
 
-void getNTPTime() {
+void configTime() {
   showProgress(0, "* Time: ");
+  configTime(-5 * 3600, 3600, "time.google.com", "pool.ntp.org");
+  struct tm timeinfo;
 
-  WiFiUDP ntpUDP;
-  NTPClient timeClient(ntpUDP);
-  String formattedDate;
-  String dayStamp;
-  String timeStamp;
-
-  timeClient.begin();
-  showProgress(0, "start, ");
-  // Set offset time in seconds to adjust for your timezone, for example:
-  // GMT +1 = 3600
-  // GMT +8 = 28800
-  // GMT -1 = -3600
-  // GMT 0 = 0
-  timeClient.setTimeOffset(-5 * 3600);
-  showProgress(0, "upd, ");
-
-  while (!timeClient.update()) {
-    timeClient.forceUpdate();
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Failed to obtain local time");
+    return;
   }
 
-  showProgress(0, "rcvd, ");
-  Serial.println("NTP time obtained");
-  Serial.println(timeClient.getFormattedTime());
-  // The formattedDate comes with the following format:
-  // 2018-05-28T16:00:13Z
-  // We need to extract date and time
-  //formattedDate = timeClient.getFormattedTime();
-
-  time_t rawtime = timeClient.getEpochTime();
-  struct tm *ti;
-  ti = localtime(&rawtime);
-
-  RTC_DateTypeDef DateStruct;
-  DateStruct.WeekDay = ti->tm_wday;
-  DateStruct.Month = ti->tm_mon;
-  DateStruct.Date = ti->tm_mday;
-  DateStruct.Year = ti->tm_year + 1900;
-  M5.Rtc.SetData(&DateStruct);
-
-  RTC_TimeTypeDef TimeStruct;
-  TimeStruct.Hours = timeClient.getHours();
-  TimeStruct.Minutes = timeClient.getMinutes();
-  TimeStruct.Seconds = timeClient.getSeconds();
-  M5.Rtc.SetTime(&TimeStruct);
+  Serial.println(&timeinfo, "Local time:  %A, %B %d %Y %H:%M:%S");
   showProgress(0, "set\n");
 }
 
@@ -429,7 +400,7 @@ const char *getWiFiStatus(bool &connected) {
 
 int getBatteryLevel(void) {
   uint16_t vbatData = M5.Axp.GetVbatData();
-  return round(((double) vbatData) / 3807.0 * 100);
+  return round(((double)vbatData) / 3807.0 * 100);
   return (double)vbatData;
   //double vbat = vbatData * 1.1 / 1000;
   //return 100.0 * ((vbat - 3.0) / (4.07 - 3.0));
