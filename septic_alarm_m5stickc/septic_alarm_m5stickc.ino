@@ -98,19 +98,6 @@ void loop() {
 }
 
 
-void showSignal() {
-  int y;
-
-  for (int n = 0; n < NUM_SAMPLES; n++) {
-    y = adcBuffer[n] * GAIN_FACTOR;
-    y = map(y, INT16_MIN, INT16_MAX, 10, 70);
-    M5.Lcd.drawPixel(n, oldy[n], BLACK);
-    M5.Lcd.drawPixel(n, y, YELLOW);
-    oldy[n] = y;
-  }
-}
-
-
 void registerAlarmEvent(bool started) {
   if (started) {
     Serial.println("+++++++ ALARM HAS STARTED");
@@ -130,9 +117,6 @@ void registerAlarmEvent(bool started) {
 }
 
 
-
-
-
 void configTime() {
   showProgress(0, "* Time: ");
   configTime(-5 * 3600, 3600, "time.google.com", "pool.ntp.org");
@@ -148,19 +132,3 @@ void configTime() {
 }
 
 
-const char *getWiFiStatus(bool &connected) {
-  connected = false;
-  wl_status_t status = WiFi.status();
-
-  switch (status) {
-    case WL_IDLE_STATUS: return "idle";
-    case WL_NO_SSID_AVAIL: return "no SSID";
-    case WL_CONNECTED: connected = true; return "connected";
-    case WL_CONNECT_FAILED: return "connection failed";
-    case WL_CONNECTION_LOST: return "connection lost";
-    case WL_DISCONNECTED: return "disconnected";
-
-    default:
-      return "<other>";
-  }
-}

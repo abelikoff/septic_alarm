@@ -133,3 +133,16 @@ void showBatteryLevel() {
   // M5.Lcd.setTextSize(1);
   // M5.Lcd.println(discharge);
 }
+
+
+/*void showSignal() {
+  int y;
+
+  for (int n = 0; n < NUM_SAMPLES; n++) {
+    y = adcBuffer[n] * GAIN_FACTOR;
+    y = map(y, INT16_MIN, INT16_MAX, 10, 70);
+    M5.Lcd.drawPixel(n, oldy[n], BLACK);
+    M5.Lcd.drawPixel(n, y, YELLOW);
+    oldy[n] = y;
+  }
+}*/

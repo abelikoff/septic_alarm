@@ -92,3 +92,22 @@ void postStatus(Status st) {
     Serial.println("Failed to update channel. HTTP error code: " + String(x));
   }
 }
+
+
+const char *getWiFiStatus(bool &connected) {
+  connected = false;
+  wl_status_t status = WiFi.status();
+
+  switch (status) {
+    case WL_IDLE_STATUS: return "idle";
+    case WL_NO_SSID_AVAIL: return "no SSID";
+    case WL_CONNECTED: connected = true; return "connected";
+    case WL_CONNECT_FAILED: return "connection failed";
+    case WL_CONNECTION_LOST: return "connection lost";
+    case WL_DISCONNECTED: return "disconnected";
+
+    default:
+      return "<other>";
+  }
+}
+
