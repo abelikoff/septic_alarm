@@ -1,3 +1,18 @@
+// This file is part of septic_alarm.
+//
+// septic_alarm is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the 
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+//
+// septic_alarm is distributed in the hope that it will be useful, 
+// but WITHOUT ANY WARRANTY; without even the implied warranty of 
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+// See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along 
+// with septic_alarm. If not, see <https://www.gnu.org/licenses/>.
+
 #include <WiFi.h>
 #include <time.h>
 #include <WiFiUdp.h>
@@ -10,6 +25,8 @@
 
 const char *ssid = SECRET_WIFI_SSID;
 const char *password = SECRET_WIFI_PASSWORD;
+
+WiFiClient wifi_client;
 
 
 void eventPostingTask(void *arg) {
@@ -171,4 +188,9 @@ const char *getWiFiStatus(bool &connected) {
     default:
       return "<other>";
   }
+}
+
+
+const char *getSSID() {
+  return ssid;
 }

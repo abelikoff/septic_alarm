@@ -1,32 +1,28 @@
-#include <cmath>
+// This file is part of septic_alarm.
+//
+// septic_alarm is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the 
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+//
+// septic_alarm is distributed in the hope that it will be useful, 
+// but WITHOUT ANY WARRANTY; without even the implied warranty of 
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+// See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along 
+// with septic_alarm. If not, see <https://www.gnu.org/licenses/>.
 
+#include <cmath>
 #include <M5StickCPlus.h>
-#include <utility/ST7735_Defines.h>
-#include <WiFi.h>
-#include <time.h>
-#include "ThingSpeak.h"
-#include <driver/i2s.h>
 
 #include "config.h"
 #include "event.h"
-#include "battery.h"
 
 const char version[] = "1.0.0";
 
-#define PIN_CLK 0
-#define PIN_DATA 34
-#define READ_LEN (2 * 256)
-#define GAIN_FACTOR 3
-#define NUM_SAMPLES 160
-
-
-int alarm_sound_streak = 0;
-uint8_t BUFFER[READ_LEN] = { 0 };
-uint16_t oldy[NUM_SAMPLES];
-int16_t *adcBuffer = NULL;
 bool display_on = false;
 double last_sound_level = 0;
-WiFiClient wifi_client;
 
 
 double calculateSoundLevel();
@@ -39,16 +35,25 @@ void setup() {
   delay(1000);
 
   event_buffer_init();
-  initProgress();
+  initDisplay();
   connectToInternet(true);
-  configTime();
+  initTime();
   add_event(STARTED);
-  i2sInit();
+  initI2S();
+
+  // This task samples sound and calculates sound level
   xTaskCreate(checkSoundVolumeTask, "checkSoundVolumeTask", 2048, NULL, 1, NULL);
+
+  // This task periodically checks the connection and handles disconnects
   xTaskCreate(connectionCheckerTask, "connectionCheckerTask", 2048, NULL, 1, NULL);
+
+  // This task processes the event buffer
   xTaskCreate(eventPostingTask, "eventPostingTask", 2048, NULL, 1, NULL);
 }
 
+
+// Loop is only used to read the buttons and show the status
+// (all meaningful work is done in 3 tasks)
 
 void loop() {
   M5.update();  // Read the press state of the keys
@@ -64,19 +69,4 @@ void loop() {
   }
 
   vTaskDelay(5 / portTICK_RATE_MS);
-}
-
-
-void configTime() {
-  showProgress(0, "* Time: ");
-  configTime(-5 * 3600, 3600, "time.google.com", "pool.ntp.org");
-  struct tm timeinfo;
-
-  if (!getLocalTime(&timeinfo)) {
-    Serial.println("Failed to obtain local time");
-    return;
-  }
-
-  Serial.println(&timeinfo, "Local time:  %A, %B %d %Y %H:%M:%S");
-  showProgress(0, "set\n");
 }

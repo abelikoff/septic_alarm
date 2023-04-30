@@ -1,17 +1,43 @@
+// This file is part of septic_alarm.
+//
+// septic_alarm is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the 
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+//
+// septic_alarm is distributed in the hope that it will be useful, 
+// but WITHOUT ANY WARRANTY; without even the implied warranty of 
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+// See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along 
+// with septic_alarm. If not, see <https://www.gnu.org/licenses/>.
+
 #include <M5StickCPlus.h>
 #include <utility/ST7735_Defines.h>
 #include <driver/i2s.h>
+#include <time.h>
 
 #include "event.h"
+
+#define PIN_CLK 0
+#define PIN_DATA 34
+#define READ_LEN (2 * 256)
+#define GAIN_FACTOR 3
+#define NUM_SAMPLES 160
+
+int alarm_sound_streak = 0;
+static uint8_t raw_buffer[READ_LEN] = { 0 };
+static int16_t *adcBuffer = NULL;
 
 
 void checkSoundVolumeTask(void *arg) {
   size_t bytesread;
 
   while (1) {
-    i2s_read(I2S_NUM_0, (char *)BUFFER, READ_LEN, &bytesread,
+    i2s_read(I2S_NUM_0, (char *)raw_buffer, READ_LEN, &bytesread,
              (100 / portTICK_RATE_MS));
-    adcBuffer = (int16_t *)BUFFER;
+    adcBuffer = (int16_t *)raw_buffer;
 
     last_sound_level = calculateSoundLevel();
     Serial.printf("Sound level: %.1f dB  (streak: %d)\n", last_sound_level, alarm_sound_streak);
@@ -54,8 +80,7 @@ double calculateSoundLevel() {
 }
 
 
-
-void i2sInit() {
+void initI2S() {
   i2s_config_t i2s_config = {
     .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM),
     .sample_rate = 44100,
@@ -96,3 +121,19 @@ int getBatteryLevel(void) {
   //double vbat = vbatData * 1.1 / 1000;
   //return 100.0 * ((vbat - 3.0) / (4.07 - 3.0));
 }
+
+
+void initTime() {
+  showProgress(0, "* Time: ");
+  configTime(TZ_GMT_OFFSET * 3600, 3600, "time.google.com", "pool.ntp.org");
+  struct tm timeinfo;
+
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Failed to obtain local time");
+    return;
+  }
+
+  Serial.println(&timeinfo, "Local time:  %A, %B %d %Y %H:%M:%S");
+  showProgress(0, "set\n");
+}
+
