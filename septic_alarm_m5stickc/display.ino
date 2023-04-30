@@ -1,10 +1,27 @@
+// This file is part of septic_alarm.
+//
+// septic_alarm is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the 
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+//
+// septic_alarm is distributed in the hope that it will be useful, 
+// but WITHOUT ANY WARRANTY; without even the implied warranty of 
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+// See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along 
+// with septic_alarm. If not, see <https://www.gnu.org/licenses/>.
+
 #include <M5StickCPlus.h>
+#include <utility/ST7735_Defines.h>
 
 #include "event.h"
 
-extern const char *ssid;
+extern const char *getSSID();
 
-void initProgress() {
+
+void initDisplay() {
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setRotation(-1);
   M5.Lcd.setTextFont(2);
@@ -65,7 +82,7 @@ void displayStatus(bool on) {
 
     if (connected) {
       M5.Lcd.setTextColor(GREEN);
-      snprintf(str, sizeof(str), "connected (%s)", ssid);
+      snprintf(str, sizeof(str), "connected (%s)", getSSID());
       M5.Lcd.drawString(str, left_margin + prefix_len, 45, font);
 
     } else {
@@ -115,25 +132,4 @@ void showProgress(int level, const char *message) {
   }
 
   M5.Lcd.printf("%s", message);
-}
-
-
-// See https://m5stack.hackster.io/niyazthalappil/covid-19-real-time-data-monitor-7b43e5
-
-void showBatteryLevel() {
-  auto vbat = M5.Axp.GetVbatData() * 1.1 / 1000;
-  auto discharge = M5.Axp.GetIdischargeData() / 2;
-
-  if (vbat >= 4) {
-    M5.Lcd.pushImage(145, 1, 14, 8, bat_3);
-  } else if (vbat >= 3.7) {
-    M5.Lcd.pushImage(145, 1, 14, 8, bat_2);
-  } else if (vbat < 3.7) {
-    M5.Lcd.pushImage(145, 1, 14, 8, bat_1);
-  } else {
-  }
-  // M5.Lcd.setTextColor(TFT_YELLOW);
-  // M5.Lcd.setCursor(140, 12);
-  // M5.Lcd.setTextSize(1);
-  // M5.Lcd.println(discharge);
 }
