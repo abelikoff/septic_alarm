@@ -12,6 +12,12 @@ int first_event_idx = 0;            // index of the first available event (when 
 int next_event_idx = 0;             // index of the element to store the next event into
 int number_of_events = 0;           // number of actual events in the buffer
 struct tm last_alarm_time = { 0 };  // timestamp of the last alarm
+SemaphoreHandle_t buf_mutex;
+
+
+void event_buffer_init() {
+  buf_mutex = xSemaphoreCreateMutex();
+}
 
 
 void add_event(event_type ev_type) {
@@ -34,12 +40,20 @@ void add_event(event_type ev_type) {
 }
 
 
-bool pop_event(event_type& status, struct tm& timestamp) {
+bool peek_event(event_type& ev_type, struct tm& timestamp) {
   if (number_of_events == 0)
     return false;
 
-  status = event_buffer[first_event_idx].ev_type;
+  ev_type = event_buffer[first_event_idx].ev_type;
   timestamp = event_buffer[first_event_idx].ev_time;
+  return true;
+}
+
+
+bool pop_event(event_type& ev_type, struct tm& timestamp) {
+  if (!peek_event(ev_type, timestamp))
+    return false;
+
   first_event_idx = (first_event_idx + 1) % EVENT_BUFFER_SIZE;
   number_of_events--;
   return true;
@@ -57,4 +71,13 @@ bool get_last_alarm_time(struct tm& timestamp) {
 
   timestamp = last_alarm_time;
   return true;
+}
+
+
+static void mutex_lock() {
+
+}
+
+static void mutex_unlock() {
+
 }

@@ -11,7 +11,8 @@ enum event_type {
 
 
 extern void add_event(event_type ev_type);
-extern bool pop_event(event_type& status, struct tm& timestamp);
+extern bool peek_event(event_type& ev_type, struct tm& timestamp);
+extern bool pop_event(event_type& ev_type, struct tm& timestamp);
 extern int get_number_of_events();
 extern bool get_last_alarm_time(struct tm& timestamp);
 
