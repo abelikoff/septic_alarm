@@ -2,7 +2,7 @@
 
 # What is it?
 
-(for more details, see [this](https://belikoff.net/FIXME))
+(for more details, see [this](https://belikoff.net/arduino-septic-alarm-monitoring/))
 
 This is an M5StickC Plus based monitor for an old-style seprtic alarm (the one that emits a loud sound). It watches for the sound and posts information about alarm starting/stopping to the Internet, thus allowing remote monitoring for the system that is inherently not remote-friendly.
 
