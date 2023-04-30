@@ -20,12 +20,12 @@ void checkSoundVolumeTask(void *arg) {
       alarm_sound_streak++;
 
       if (alarm_sound_streak == ALARM_SOUND_STREAK_THRESHOLD) {
-        Serial.println("+++++++ ALARM HAS STARTED");
+        Serial.println("<<<<<< ALARM HAS STARTED >>>>>>");
         add_event(ALARM_ON);
       }
     } else {
       if (alarm_sound_streak > 0) {
-        Serial.println("------- ALARM HAS STOPPED");
+        Serial.println("<<<<<< ALARM HAS STOPPED >>>>>>");
         add_event(ALARM_OFF);
       }
 

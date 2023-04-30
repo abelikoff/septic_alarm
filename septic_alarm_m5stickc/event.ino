@@ -21,6 +21,8 @@ void event_buffer_init() {
 
 
 void add_event(event_type ev_type) {
+  buf_debug("add");
+  mutex_lock();
   event_buffer[next_event_idx].ev_type = ev_type;
 
   if (getLocalTime(&event_buffer[next_event_idx].ev_time)) {
@@ -37,25 +39,41 @@ void add_event(event_type ev_type) {
   } else {
     number_of_events++;
   }
+
+  mutex_unlock();
 }
 
 
 bool peek_event(event_type& ev_type, struct tm& timestamp) {
-  if (number_of_events == 0)
+  buf_debug("peek");
+  mutex_lock();
+
+  if (number_of_events == 0) {
+    mutex_unlock();
     return false;
+  }
 
   ev_type = event_buffer[first_event_idx].ev_type;
   timestamp = event_buffer[first_event_idx].ev_time;
+  mutex_unlock();
   return true;
 }
 
 
 bool pop_event(event_type& ev_type, struct tm& timestamp) {
-  if (!peek_event(ev_type, timestamp))
-    return false;
+  buf_debug("pop");
+  mutex_lock();
 
+  if (number_of_events == 0) {
+    mutex_unlock();
+    return false;
+  }
+
+  ev_type = event_buffer[first_event_idx].ev_type;
+  timestamp = event_buffer[first_event_idx].ev_time;
   first_event_idx = (first_event_idx + 1) % EVENT_BUFFER_SIZE;
   number_of_events--;
+  mutex_unlock();
   return true;
 }
 
@@ -75,9 +93,13 @@ bool get_last_alarm_time(struct tm& timestamp) {
 
 
 static void mutex_lock() {
-
+  xSemaphoreTake(buf_mutex, portMAX_DELAY);
 }
 
 static void mutex_unlock() {
+  xSemaphoreGive(buf_mutex);
+}
 
+static void buf_debug(const char* s) {
+  Serial.printf("Event buffer: <[%d] %d->%d>: %s\n", number_of_events, first_event_idx, next_event_idx, s);
 }

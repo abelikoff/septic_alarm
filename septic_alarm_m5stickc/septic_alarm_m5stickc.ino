@@ -11,7 +11,7 @@
 #include "event.h"
 #include "battery.h"
 
-const char version[] = "0.0.2";
+const char version[] = "1.0.0";
 
 #define PIN_CLK 0
 #define PIN_DATA 34
@@ -30,7 +30,7 @@ WiFiClient wifi_client;
 
 
 double calculateSoundLevel();
-void connectToWiFi(bool display_progress = false);
+void connectToInternet(bool display_progress = false);
 
 
 void setup() {
@@ -38,11 +38,11 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
+  event_buffer_init();
   initProgress();
-  connectToWiFi(true);
-  connectToCloud();
+  connectToInternet(true);
   configTime();
-  postStatus(STARTED);
+  add_event(STARTED);
   i2sInit();
   xTaskCreate(checkSoundVolumeTask, "checkSoundVolumeTask", 2048, NULL, 1, NULL);
   xTaskCreate(connectionCheckerTask, "connectionCheckerTask", 2048, NULL, 1, NULL);
@@ -80,5 +80,3 @@ void configTime() {
   Serial.println(&timeinfo, "Local time:  %A, %B %d %Y %H:%M:%S");
   showProgress(0, "set\n");
 }
-
-

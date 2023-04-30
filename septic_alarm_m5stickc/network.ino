@@ -18,10 +18,12 @@ void eventPostingTask(void *arg) {
 
   while (true) {
     auto now = millis();
-    double time_since_successfull_post = last_successful_post_time > 0 ? (now - last_successful_post_time) * 1000 : -1;
-    double time_since_unsuccessfull_post = last_unsuccessful_post_time > 0 ? (now - last_unsuccessful_post_time) * 1000 : -1;
+    double time_since_successfull_post = last_successful_post_time > 0 ? (now - last_successful_post_time) / 1000.0 : -1.0;
+    double time_since_unsuccessfull_post = last_unsuccessful_post_time > 0 ? (now - last_unsuccessful_post_time) / 1000.0 : -1.0;
+    //Serial.printf("Postman: loop started: succ %.1f s ago, unsucc %.1f s ago\n", time_since_successfull_post, time_since_unsuccessfull_post);
     bool can_post = true;
-
+    event_type ev_type;
+    struct tm ev_time;
     auto wifi_status = WiFi.status();
 
     if (wifi_status != WL_IDLE_STATUS && wifi_status != WL_CONNECTED) {
@@ -29,20 +31,17 @@ void eventPostingTask(void *arg) {
       can_post = false;
     }
 
-    if (time_since_successfull_post > 0 && time_since_successfull_post < EVT_POST_THROTTLE_PERIOD_SECONDS) {
+    if (can_post && time_since_successfull_post > 0 && time_since_successfull_post < EVT_POST_THROTTLE_PERIOD_SECONDS) {
       Serial.printf("Postman: CANNOT post (only %d seconds passed since last post)\n", (int)time_since_successfull_post);
       can_post = false;
     }
 
-    if (time_since_unsuccessfull_post > 0 && time_since_unsuccessfull_post < EVT_POST_RETRY_PERIOD_SECONDS) {
+    if (can_post && time_since_unsuccessfull_post > 0 && time_since_unsuccessfull_post < EVT_POST_RETRY_PERIOD_SECONDS) {
       Serial.printf("Postman: CANNOT post (only %d seconds passed since last retry)\n", (int)time_since_unsuccessfull_post);
       can_post = false;
     }
 
-    event_type ev_type;
-    struct tm ev_time;
-
-    if (!peek_event(ev_type, ev_time)) {
+    if (can_post && !peek_event(ev_type, ev_time)) {
       Serial.printf("Postman: CANNOT post (event buffer empty)\n");
       can_post = false;
     }
@@ -73,6 +72,7 @@ bool postStatus(event_type st) {
   } else {
     x = ThingSpeak.writeField(THINGSPEAK_CHANNEL_ID, 1, st == ALARM_ON ? 1 : 0, THINGSPEAK_API_KEY);
   }
+
   if (x != 200) {
     Serial.println("Failed to update channel. HTTP error code: " + String(x));
     return false;
@@ -95,7 +95,7 @@ void connectionCheckerTask(void *arg) {
       Serial.printf("WiFi is not connected (%.1f since last attempt)\n", since * 1000.0);
 
       if (since >= RECONNECT_RETRY_PERIOD_SECONDS * 1000) {
-        connectToWiFi();
+        connectToInternet();
         last_reconnect_attempt = millis();
       }
     }
@@ -105,7 +105,7 @@ void connectionCheckerTask(void *arg) {
 }
 
 
-void connectToWiFi(bool display_progress) {
+void connectToInternet(bool display_progress) {
   char s[128];
 
   if (display_progress) {
@@ -143,13 +143,16 @@ void connectToWiFi(bool display_progress) {
     snprintf(s, sizeof(s), "OK (%s)\n", WiFi.localIP().toString());
     showProgress(0, s);
   }
-}
 
+  // connect to ThingSpeak
 
-void connectToCloud() {
-  showProgress(0, "* ThingSpeak... ");
+  if (display_progress)
+    showProgress(0, "* ThingSpeak... ");
+
   ThingSpeak.begin(wifi_client);
-  showProgress(0, "OK\n");
+
+  if (display_progress)
+    showProgress(0, "OK\n");
 }
 
 

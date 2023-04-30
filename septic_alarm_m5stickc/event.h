@@ -10,6 +10,7 @@ enum event_type {
 };
 
 
+extern void event_buffer_init();
 extern void add_event(event_type ev_type);
 extern bool peek_event(event_type& ev_type, struct tm& timestamp);
 extern bool pop_event(event_type& ev_type, struct tm& timestamp);
