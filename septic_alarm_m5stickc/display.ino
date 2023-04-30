@@ -1,5 +1,7 @@
 #include <M5StickCPlus.h>
 
+#include "event.h"
+
 extern const char *ssid;
 
 void initProgress() {
@@ -71,13 +73,17 @@ void displayStatus(bool on) {
       M5.Lcd.drawString(str, left_margin + prefix_len, 45, font);
     }
 
+    // display last alarm time
+
     prefix_len = M5.Lcd.textWidth(last_alarm_prefix, font);
     M5.Lcd.setTextColor(YELLOW);
     M5.Lcd.drawString(last_alarm_prefix, left_margin, 70, font);
 
-    if (has_last_alarm_timestamp) {
+    struct tm last_alarm_time;
+
+    if (get_last_alarm_time(last_alarm_time)) {
       M5.Lcd.setTextColor(WHITE);
-      strftime(str, sizeof(str), "%B %d %Y %H:%M:%S", &last_alarm_tm);
+      strftime(str, sizeof(str), "%Y/%m/%d %H:%M:%S", &last_alarm_time);
       M5.Lcd.drawString(str, left_margin + prefix_len, 70, font);
     }
 

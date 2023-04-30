@@ -2,6 +2,8 @@
 #include <utility/ST7735_Defines.h>
 #include <driver/i2s.h>
 
+#include "event.h"
+
 
 void checkSoundVolumeTask(void *arg) {
   size_t bytesread;
@@ -18,11 +20,13 @@ void checkSoundVolumeTask(void *arg) {
       alarm_sound_streak++;
 
       if (alarm_sound_streak == ALARM_SOUND_STREAK_THRESHOLD) {
-        registerAlarmEvent(true);
+        Serial.println("+++++++ ALARM HAS STARTED");
+        add_event(ALARM_ON);
       }
     } else {
       if (alarm_sound_streak > 0) {
-        registerAlarmEvent(false);
+        Serial.println("------- ALARM HAS STOPPED");
+        add_event(ALARM_OFF);
       }
 
       alarm_sound_streak = 0;
@@ -92,4 +96,3 @@ int getBatteryLevel(void) {
   //double vbat = vbatData * 1.1 / 1000;
   //return 100.0 * ((vbat - 3.0) / (4.07 - 3.0));
 }
-

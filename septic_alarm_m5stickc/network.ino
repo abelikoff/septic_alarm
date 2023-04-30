@@ -2,11 +2,44 @@
 #include <time.h>
 #include <WiFiUdp.h>
 #include "ThingSpeak.h"
+
 #include "arduino_secrets.h"
+#include "config.h"
+#include "event.h"
 
 
 const char *ssid = SECRET_WIFI_SSID;
 const char *password = SECRET_WIFI_PASSWORD;
+
+
+void eventPostingTask(void *arg) {
+  unsigned long last_successful_post_time = 0;
+  unsigned long last_unsuccessful_post_time = 0;
+
+  while (true) {
+    event_type ev_type;
+    struct tm ev_time;
+
+    if (pop_event(ev_type, ev_time)) {
+
+      auto status = WiFi.status();
+      bool wifi_connected = (status == WL_IDLE_STATUS || status == WL_CONNECTED);
+      Serial.printf("@@@ Checking WiFi: %s\n", wifi_connected ? "CONNECTED" : "NOT CONNECTED");
+
+      if (!wifi_connected) {
+        auto since = millis() - last_reconnect_attempt;
+        Serial.printf("WiFi is not connected (%.1f since last attempt)\n", since * 1000.0);
+
+        if (since >= RECONNECT_RETRY_PERIOD_SECONDS * 1000) {
+          connectToWiFi();
+          last_reconnect_attempt = millis();
+        }
+      }
+    }
+
+    vTaskDelay(EVT_POST_DELAY_SECONDS * 1000 / portTICK_PERIOD_MS);
+  }
+}
 
 
 void connectionCheckerTask(void *arg) {
@@ -80,7 +113,7 @@ void connectToCloud() {
 }
 
 
-void postStatus(Status st) {
+bool postStatus(event_type st) {
   int x;
 
   if (st == STARTED) {
@@ -90,7 +123,10 @@ void postStatus(Status st) {
   }
   if (x != 200) {
     Serial.println("Failed to update channel. HTTP error code: " + String(x));
+    return false;
   }
+
+  return true;
 }
 
 
@@ -110,4 +146,3 @@ const char *getWiFiStatus(bool &connected) {
       return "<other>";
   }
 }
-

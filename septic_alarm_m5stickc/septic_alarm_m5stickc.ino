@@ -7,6 +7,8 @@
 #include "ThingSpeak.h"
 #include <driver/i2s.h>
 
+#include "config.h"
+#include "event.h"
 #include "battery.h"
 
 const char version[] = "0.0.2";
@@ -17,25 +19,6 @@ const char version[] = "0.0.2";
 #define GAIN_FACTOR 3
 #define NUM_SAMPLES 160
 
-#define DEBUG
-
-#ifdef DEBUG
-
-const double ALARM_SOUND_LEVEL_THRESHOLD = 4.0;
-const int ALARM_SOUND_STREAK_THRESHOLD = 1;
-const int SOUND_CHECK_DELAY_SECONDS = 5;
-const int CONN_CHECK_DELAY_SECONDS = 60;        // How often to check WiFi status (seconds)
-const int RECONNECT_RETRY_PERIOD_SECONDS = 60;  // How often to re-try reconnecting to WiFi (seconds)
-
-#else  // production settings
-
-const double ALARM_SOUND_LEVEL_THRESHOLD = 9.0;
-const int ALARM_SOUND_STREAK_THRESHOLD = 4;
-const int SOUND_CHECK_DELAY_SECONDS = 30;
-const int CONN_CHECK_DELAY_SECONDS = 60;         // How often to check WiFi status (seconds)
-const int RECONNECT_RETRY_PERIOD_SECONDS = 300;  // How often to re-try reconnecting to WiFi (seconds)
-
-#endif
 
 int alarm_sound_streak = 0;
 uint8_t BUFFER[READ_LEN] = { 0 };
@@ -43,22 +26,7 @@ uint16_t oldy[NUM_SAMPLES];
 int16_t *adcBuffer = NULL;
 bool display_on = false;
 double last_sound_level = 0;
-bool has_last_alarm_timestamp = false;
-struct tm last_alarm_tm;
 WiFiClient wifi_client;
-
-enum Status {
-  STARTED,
-  ALARM_OFF,
-  ALARM_ON
-};
-
-enum ConnStatus {
-  ST_CONNECTED,
-  ST_RECONNECTED,
-  ST_DISCONNECTED,
-  ST_NOT_CONNECTED
-};
 
 
 double calculateSoundLevel();
@@ -78,6 +46,7 @@ void setup() {
   i2sInit();
   xTaskCreate(checkSoundVolumeTask, "checkSoundVolumeTask", 2048, NULL, 1, NULL);
   xTaskCreate(connectionCheckerTask, "connectionCheckerTask", 2048, NULL, 1, NULL);
+  xTaskCreate(eventPostingTask, "eventPostingTask", 2048, NULL, 1, NULL);
 }
 
 
@@ -95,25 +64,6 @@ void loop() {
   }
 
   vTaskDelay(5 / portTICK_RATE_MS);
-}
-
-
-void registerAlarmEvent(bool started) {
-  if (started) {
-    Serial.println("+++++++ ALARM HAS STARTED");
-
-    if (!getLocalTime(&last_alarm_tm)) {
-      Serial.println("Failed to obtain local time");
-      has_last_alarm_timestamp = false;
-    } else {
-      has_last_alarm_timestamp = true;
-    }
-
-    postStatus(ALARM_ON);
-  } else {
-    Serial.println("------- ALARM HAS STOPPED");
-    postStatus(ALARM_OFF);
-  }
 }
 
 
